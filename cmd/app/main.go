@@ -1,39 +1,63 @@
 package main
 
 import (
+	"database/sql"
 	"fmt"
 	"log"
+	"log/slog"
 	"netologia-refactor/internal/db"
 	"netologia-refactor/internal/repository"
 	"netologia-refactor/internal/service"
 )
 
-func main() {
-	database, err := db.Open("orders.db")
+// initDB отвечает только за инициализацию БД и миграции
+func initDB(dbClient db.DB, dsn string) (*sql.DB, error) {
+	database, err := dbClient.Open(dsn)
 	if err != nil {
-		log.Fatalf("open db: %v", err)
-	}
-	defer database.Close()
-
-	if err := db.Migrate(database); err != nil {
-		log.Fatalf("migrate: %v", err)
+		return nil, fmt.Errorf("open db: %w", err)
 	}
 
+	if err := dbClient.Migrate(database); err != nil {
+		// если миграции не прошли, соединение закрываем
+		database.Close()
+		return nil, fmt.Errorf("migrate: %w", err)
+	}
+
+	return database, nil
+}
+
+// runApp отвечает только за бизнес-логику
+func runApp(database *sql.DB) error {
 	repo := repository.NewSQLiteOrderRepository(database)
 
 	emailSender := service.NewEmailSender()
 	emailOrderService := service.NewOrderService(repo, emailSender)
 
-	fmt.Println("=== Создание заказа с EmailSender ===")
+	slog.Info("=== Создание заказа с EmailSender ===")
 	if err := emailOrderService.CreateOrder("Иван", []string{"apple", "banana"}, 10.5); err != nil {
-		log.Fatal(err)
+		return err
 	}
 
 	smsSender := service.NewSMSSender()
 	smsOrderService := service.NewOrderService(repo, smsSender)
 
-	fmt.Println("=== Создание заказа с SMSSender ===")
+	slog.Info("=== Создание заказа с SMSSender ===")
 	if err := smsOrderService.CreateOrder("Пётр", []string{"orange", "mango"}, 20.0); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func main() {
+	dbClient := db.NewSQLiteDB()
+	database, err := initDB(dbClient, "orders.db")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer database.Close()
+
+	if err := runApp(database); err != nil {
 		log.Fatal(err)
 	}
 }

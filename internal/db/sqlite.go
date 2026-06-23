@@ -4,15 +4,21 @@ import (
 	"database/sql"
 	"embed"
 	"fmt"
-	"log"
+	"log/slog"
 
 	_ "github.com/mattn/go-sqlite3"
 )
 
+//go:embed migrations/*.sql
 var migrationsFS embed.FS
 
-// Open открывает соединение с БД
-func Open(path string) (*sql.DB, error) {
+type SQLiteDB struct{}
+
+func NewSQLiteDB() *SQLiteDB {
+	return &SQLiteDB{}
+}
+
+func (s *SQLiteDB) Open(path string) (*sql.DB, error) {
 	db, err := sql.Open("sqlite3", path)
 	if err != nil {
 		return nil, err
@@ -23,8 +29,7 @@ func Open(path string) (*sql.DB, error) {
 	return db, nil
 }
 
-// Migrate применяет все миграции из db/migrations
-func Migrate(db *sql.DB) error {
+func (s *SQLiteDB) Migrate(db *sql.DB) error {
 	files, err := migrationsFS.ReadDir("migrations")
 	if err != nil {
 		return fmt.Errorf("read migrations dir: %w", err)
@@ -34,14 +39,14 @@ func Migrate(db *sql.DB) error {
 		if f.IsDir() {
 			continue
 		}
-		name := f.Name()
 
+		name := f.Name()
 		content, err := migrationsFS.ReadFile("migrations/" + name)
 		if err != nil {
 			return fmt.Errorf("read migration %s: %w", name, err)
 		}
 
-		log.Printf("Applying migration: %s\n", name)
+		slog.Info("Applying migration", "name", name)
 		if _, err := db.Exec(string(content)); err != nil {
 			return fmt.Errorf("apply migration %s: %w", name, err)
 		}

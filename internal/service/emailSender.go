@@ -1,6 +1,8 @@
 package service
 
-import "fmt"
+import (
+	"log/slog"
+)
 
 // EmailSender реализует Notifier
 type EmailSender struct{}
@@ -10,6 +12,6 @@ func NewEmailSender() *EmailSender {
 }
 
 func (e *EmailSender) Send(customer string, message string) error {
-	fmt.Printf("Отправка EMAIL уведомления клиенту %s: %s\n", customer, message)
+	slog.Info("Отправка EMAIL уведомления клиенту ", "customer", customer, "message", message)
 	return nil
 }
